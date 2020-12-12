@@ -20,8 +20,10 @@
  *    console.log(r.height);      // => 20
  *    console.log(r.getArea());   // => 200
  */
-function Rectangle(/* width, height */) {
-  throw new Error('Not implemented');
+function Rectangle(width, height) {
+  this.width = width;
+  this.height = height;
+  this.getArea = () => this.width * this.height;
 }
 
 
@@ -35,8 +37,8 @@ function Rectangle(/* width, height */) {
  *    [1,2,3]   =>  '[1,2,3]'
  *    { width: 10, height : 20 } => '{"height":10,"width":20}'
  */
-function getJSON(/* obj */) {
-  throw new Error('Not implemented');
+function getJSON(obj) {
+  return JSON.stringify(obj);
 }
 
 
@@ -51,8 +53,8 @@ function getJSON(/* obj */) {
  *    const r = fromJSON(Circle.prototype, '{"radius":10}');
  *
  */
-function fromJSON(/* proto, json */) {
-  throw new Error('Not implemented');
+function fromJSON(proto, json) {
+  return new proto.constructor(...Object.values(JSON.parse(json)));
 }
 
 
@@ -111,33 +113,137 @@ function fromJSON(/* proto, json */) {
  */
 
 const cssSelectorBuilder = {
-  element(/* value */) {
-    throw new Error('Not implemented');
+  error(value) {
+    if (value === 'order') {
+      throw new Error('Selector parts should be arranged in the following order: element, id, class, attribute, pseudo-class, pseudo-element');
+    } else if (value === 'elements') {
+      throw new Error('Element, id and pseudo-element should not occur more then one time inside the selector');
+    }
   },
 
-  id(/* value */) {
-    throw new Error('Not implemented');
+  element(value) {
+    function MyElementSelector(val, prev) {
+      const item = { type: 'element', value: val, weight: 0 };
+      if (prev) {
+        if (prev.some((elem) => elem.type === 'element')) {
+          this.error('elements');
+        }
+        if (prev[prev.length - 1].weight > item.weight) this.error('order');
+        this.items = prev;
+      } else {
+        this.items = [];
+      }
+      this.items.push(item);
+    }
+    MyElementSelector.prototype = cssSelectorBuilder;
+    return new MyElementSelector(value, this.items);
   },
 
-  class(/* value */) {
-    throw new Error('Not implemented');
+  id(value) {
+    function MyIdSelector(val, prev) {
+      const item = { type: 'id', value: val, weight: 1 };
+      if (prev) {
+        if (prev.some((elem) => elem.type === 'id')) {
+          this.error('elements');
+        }
+        if (prev[prev.length - 1].weight > item.weight) this.error('order');
+        this.items = prev;
+      } else {
+        this.items = [];
+      }
+      this.items.push(item);
+    }
+    MyIdSelector.prototype = cssSelectorBuilder;
+    return new MyIdSelector(value, this.items);
   },
 
-  attr(/* value */) {
-    throw new Error('Not implemented');
+  class(value) {
+    function MyClassSelector(val, prev) {
+      const item = { type: 'class', value: val, weight: 2 };
+      if (prev) {
+        if (prev[prev.length - 1].weight > item.weight) this.error('order');
+        this.items = prev;
+      } else {
+        this.items = [];
+      }
+      this.items.push(item);
+    }
+    MyClassSelector.prototype = cssSelectorBuilder;
+    return new MyClassSelector(value, this.items);
   },
 
-  pseudoClass(/* value */) {
-    throw new Error('Not implemented');
+  attr(value) {
+    function MyAttrSelector(val, prev) {
+      const item = { type: 'attr', value: val, weight: 3 };
+      if (prev) {
+        if (prev[prev.length - 1].weight > item.weight) this.error('order');
+        this.items = prev;
+      } else {
+        this.items = [];
+      }
+      this.items.push(item);
+    }
+    MyAttrSelector.prototype = cssSelectorBuilder;
+    return new MyAttrSelector(value, this.items);
   },
 
-  pseudoElement(/* value */) {
-    throw new Error('Not implemented');
+  pseudoClass(value) {
+    function MyPseudoClassSelector(val, prev) {
+      const item = { type: 'pseudoClass', value: val, weight: 4 };
+      if (prev) {
+        if (prev[prev.length - 1].weight > item.weight) this.error('order');
+        this.items = prev;
+      } else {
+        this.items = [];
+      }
+      this.items.push(item);
+    }
+    MyPseudoClassSelector.prototype = cssSelectorBuilder;
+    return new MyPseudoClassSelector(value, this.items);
   },
 
-  combine(/* selector1, combinator, selector2 */) {
-    throw new Error('Not implemented');
+  pseudoElement(value) {
+    function MyPseudoElementSelector(val, prev) {
+      const item = { type: 'pseudoElement', value: val, weight: 5 };
+      if (prev) {
+        if (prev.some((elem) => elem.type === 'pseudoElement')) {
+          this.error('elements');
+        }
+        if (prev[prev.length - 1].weight > item.weight) this.error('order');
+        this.items = prev;
+      } else {
+        this.items = [];
+      }
+      this.items.push(item);
+    }
+    MyPseudoElementSelector.prototype = cssSelectorBuilder;
+    return new MyPseudoElementSelector(value, this.items);
   },
+
+  combine(selector1, combinator, selector2) {
+    function MyCombineSelector(sel1, comb, sel2) {
+      this.items = [].concat(sel1.items);
+      this.items.push({ type: 'combine', value: comb });
+      this.items = this.items.concat(sel2.items);
+    }
+    MyCombineSelector.prototype = cssSelectorBuilder;
+    return new MyCombineSelector(selector1, combinator, selector2);
+  },
+
+  stringify() {
+    return this.items.reduce((res, item) => {
+      let newRes = res;
+      if (item.type === 'element') newRes += item.value;
+      if (item.type === 'id') newRes += `#${item.value}`;
+      if (item.type === 'class') newRes += `.${item.value}`;
+      if (item.type === 'attr') newRes += `[${item.value}]`;
+      if (item.type === 'pseudoClass') newRes += `:${item.value}`;
+      if (item.type === 'pseudoElement') newRes += `::${item.value}`;
+      if (item.type === 'combine') newRes += ` ${item.value} `;
+      return newRes;
+    }, '');
+  },
+
 };
 
 
